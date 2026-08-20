@@ -1,0 +1,45 @@
+name = "github-devhelm-webhook"
+main = "index.js"
+compatibility_date = "2025-03-01"
+compatibility_flags = ["nodejs_compat"]
+
+
+[[kv_namespaces]]
+binding = "DEVHELM_KV"
+id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+
+# Secrets Store bindings — managed centrally at https://dash.cloudflare.com → Secrets Store
+[[secrets_store_secrets]]
+binding = "GITHUB_TOKEN"
+store_id = "2556bcd9458349f6b4ff2a3fc93bdba1"
+secret_name = "GITHUB_TOKEN"
+
+[[secrets_store_secrets]]
+binding = "GITHUB_WEBHOOK_SECRET"
+store_id = "2556bcd9458349f6b4ff2a3fc93bdba1"
+secret_name = "DEVHELM_WEBHOOK_SECRET"
+
+[[secrets_store_secrets]]
+binding = "DEVHELM_API_TOKEN"
+store_id = "2556bcd9458349f6b4ff2a3fc93bdba1"
+secret_name = "DEVHELM_API_TOKEN"
+
+[[secrets_store_secrets]]
+binding = "DEVHELM_ORG_ID"
+store_id = "2556bcd9458349f6b4ff2a3fc93bdba1"
+secret_name = "DEVHELM_ORG_ID"
+
+[[secrets_store_secrets]]
+binding = "DEVHELM_STATUS_PAGE_SLUG"
+store_id = "2556bcd9458349f6b4ff2a3fc93bdba1"
+secret_name = "DEVHELM_STATUS_PAGE_SLUG"
+
+[[secrets_store_secrets]]
+binding = "DEVHELM_STATUS_PAGE_URL"
+store_id = "2556bcd9458349f6b4ff2a3fc93bdba1"
+secret_name = "DEVHELM_STATUS_PAGE_URL"
+
+[[secrets_store_secrets]]
+binding = "DEVHELM_WORKSPACE_ID"
+store_id = "2556bcd9458349f6b4ff2a3fc93bdba1"
+secret_name = "DEVHELM_WORKSPACE_ID"

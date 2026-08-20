@@ -1,0 +1,14 @@
+{
+  "name": "github-devhelm-webhook",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cloudflare Worker: GitHub PR → DevHelm Incident + Status Page Integration",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
