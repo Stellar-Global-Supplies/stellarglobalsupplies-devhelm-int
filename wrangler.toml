@@ -39,11 +39,6 @@ binding = "DEVHELM_STATUS_PAGE_URL"
 store_id = "2556bcd9458349f6b4ff2a3fc93bdba1"
 secret_name = "DEVHELM_STATUS_PAGE_URL"
 
-[[secrets_store_secrets]]
-binding = "DEVHELM_WORKSPACE_ID"
-store_id = "2556bcd9458349f6b4ff2a3fc93bdba1"
-secret_name = "DEVHELM_WORKSPACE_ID"
-
 [observability]
 enabled = true
 head_sampling_rate = 1

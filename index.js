@@ -302,18 +302,15 @@ async function postGitHubComment(owner, repo, prNumber, body, env) {
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
 async function devhelmHeaders(env) {
-  const [apiToken, orgId, workspaceId] = await Promise.all([
+  const [apiToken, orgId] = await Promise.all([
     env.DEVHELM_API_TOKEN.get(),
     env.DEVHELM_ORG_ID.get(),
-    env.DEVHELM_WORKSPACE_ID.get(),
   ]);
-  const h = {
+  return {
     "Authorization":    `Bearer ${apiToken}`,
     "Content-Type":     "application/json",
     "x-phelm-org-id":  orgId || "",
   };
-  if (workspaceId) h["x-phelm-workspace-id"] = workspaceId;
-  return h;
 }
 
 async function buildStatusPageUrl(entry, isMaintenance, env) {

@@ -55,9 +55,6 @@ wrangler secret put GITHUB_TOKEN
 
 # DevHelm org ID — visible in app.devhelm.io URL or API key settings
 wrangler secret put DEVHELM_ORG_ID
-
-# Optional: only needed if your API token spans multiple workspaces
-wrangler secret put DEVHELM_WORKSPACE_ID
 ```
 
 ---
@@ -134,7 +131,6 @@ incident is created (second trigger is a no-op).
 | `DEVHELM_API_TOKEN` | ✅ | `dh_live_...` token from DevHelm Settings |
 | `GITHUB_TOKEN` | ✅ | GitHub PAT with `repo` scope |
 | `DEVHELM_ORG_ID` | ✅ | Your DevHelm org ID |
-| `DEVHELM_WORKSPACE_ID` | ❌ | Only if multi-workspace token |
 
 ---
 
