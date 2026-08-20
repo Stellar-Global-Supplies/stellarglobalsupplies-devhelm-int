@@ -6,7 +6,7 @@ compatibility_flags = ["nodejs_compat"]
 
 [[kv_namespaces]]
 binding = "DEVHELM_KV"
-id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+id = "14e0bb816ef54e659f8bcb17b27be653"
 
 # Secrets Store bindings — managed centrally at https://dash.cloudflare.com → Secrets Store
 [[secrets_store_secrets]]
