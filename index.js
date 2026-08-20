@@ -118,7 +118,7 @@ async function handlePullRequest(payload, env) {
         : devhelmCreateStatusPageIncident(title, description, triggerLabel, env),
     ]);
   } catch (err) {
-    console.error("DevHelm API error:", err);
+    console.error("DevHelm API error:", err.stack ?? err.message);
     return new Response(`Error: ${err.message}`, { status: 500 });
   }
 
@@ -234,26 +234,40 @@ async function devhelmCreateStatusPageIncident(title, description, triggerLabel,
 }
 
 async function devhelmCreateMaintenanceWindow(title, description, pr, env) {
-  const slug = await env.DEVHELM_STATUS_PAGE_SLUG.get();
+  // Maintenance windows are org-level, not status-page-level.
+  // Endpoint: POST /api/v1/maintenance-windows
+  // Docs: https://docs.devhelm.io/incidents/maintenance-windows
 
-  // Default: maintenance window starts now, ends in 2 hours.
-  // You can customise by parsing dates out of the PR body if your team
-  // follows a convention like "Start: 2026-08-21 02:00 UTC / End: 04:00 UTC"
-  const startAt = new Date();
-  const endAt   = new Date(startAt.getTime() + 2 * 60 * 60 * 1000);
+  // Default: starts now, ends in 2 hours.
+  // Customise by parsing dates from the PR body if your team uses a convention
+  // like "Start: 2026-08-21 02:00 UTC / End: 04:00 UTC"
+  const startsAt = new Date();
+  const endsAt   = new Date(startsAt.getTime() + 2 * 60 * 60 * 1000);
 
-  const res = await fetch(`${DEVHELM_API}/status-pages/${slug}/maintenance-windows`, {
-    method: "POST",
-    headers: await devhelmHeaders(env),
-    body: JSON.stringify({
-      title,
-      body: description,
-      scheduledFor:  startAt.toISOString(),
-      scheduledUntil: endAt.toISOString(),
-      // components: ["component-id-here"],  // optional
-    }),
-  });
-  if (!res.ok) throw new Error(`Maintenance window ${res.status}: ${await res.text()}`);
+  const payload = {
+    startsAt:       startsAt.toISOString(),
+    endsAt:         endsAt.toISOString(),
+    reason:         `${title}\n\n${description}`,
+    suppressAlerts: true,
+    // monitorId: "<uuid>",  // omit for org-wide window
+  };
+
+  let res;
+  try {
+    res = await fetch(`${DEVHELM_API}/maintenance-windows`, {
+      method: "POST",
+      headers: await devhelmHeaders(env),
+      body: JSON.stringify(payload),
+    });
+  } catch (networkErr) {
+    throw new Error(`Maintenance window network error: ${networkErr.message}`);
+  }
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Maintenance window ${res.status}: ${body}`);
+  }
+
   const json = await res.json();
   return json.data ?? json;
 }
@@ -264,13 +278,13 @@ async function resolveStatusPageEntry(stored, reason, env) {
   if (!id) return;
 
   if (stored.statusPageEntryType === "maintenance") {
-    // Close the maintenance window early
-    const res = await fetch(`${DEVHELM_API}/status-pages/${slug}/maintenance-windows/${id}`, {
-      method: "PATCH",
+    // Cancel the maintenance window early — endpoint: DELETE /api/v1/maintenance-windows/{id}/cancel
+    const res = await fetch(`${DEVHELM_API}/maintenance-windows/${id}/cancel`, {
+      method: "POST",
       headers: await devhelmHeaders(env),
-      body: JSON.stringify({ status: "completed", body: reason }),
+      body: JSON.stringify({ reason }),
     });
-    if (!res.ok) console.error(`Resolve maintenance ${res.status}: ${await res.text()}`);
+    if (!res.ok) console.error(`Cancel maintenance window ${res.status}: ${await res.text()}`);
   } else {
     // Resolve the status page incident
     const res = await fetch(`${DEVHELM_API}/status-pages/${slug}/incidents/${id}`, {
@@ -314,15 +328,17 @@ async function devhelmHeaders(env) {
 }
 
 async function buildStatusPageUrl(entry, isMaintenance, env) {
-  // Uses your custom domain (DEVHELM_STATUS_PAGE_URL) if set,
-  // otherwise falls back to the DevHelm-hosted URL.
+  if (isMaintenance) {
+    // Maintenance windows are org-level, not on the status page.
+    return `https://app.devhelm.io/maintenance-windows/${entry.id}`;
+  }
+  // Status page incidents: use custom domain if set, else DevHelm-hosted URL.
   const [statusPageUrl, statusPageSlug] = await Promise.all([
     env.DEVHELM_STATUS_PAGE_URL.get(),
     env.DEVHELM_STATUS_PAGE_SLUG.get(),
   ]);
   const base = (statusPageUrl || `https://app.devhelm.io/dashboard/status-pages/${statusPageSlug}`).replace(/\/$/, "");
-  const path = isMaintenance ? "maintenance" : "incidents";
-  return `${base}/${path}/${entry.id}`;
+  return `${base}/incidents/${entry.id}`;
 }
 
 function labelToType(label) {
