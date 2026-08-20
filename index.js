@@ -226,7 +226,7 @@ async function devhelmCreateStatusPageIncident(title, description, triggerLabel,
   // impact enum: NONE | MINOR | MAJOR | CRITICAL (uppercase)
   // status enum: INVESTIGATING | IDENTIFIED | MONITORING | RESOLVED (uppercase)
   // Required: title, impact, body.
-  const statusPageId = await env.DEVHELM_STATUS_PAGE_ID.get();
+  const statusPageId = await env.DEVHELM_STATUS_PAGE_SLUG.get();
   const impact = triggerLabel === "hotfix" ? "MAJOR" : "MINOR";
 
   const res = await fetch(`${DEVHELM_API}/status-pages/${statusPageId}/incidents`, {
@@ -300,7 +300,7 @@ async function resolveStatusPageEntry(stored, reason, env) {
     // Resolve the status page incident
     // PATCH /api/v1/status-pages/{id}/incidents/{incidentId}
     // status enum is uppercase: RESOLVED. Endpoint uses page UUID not slug.
-    const statusPageId = await env.DEVHELM_STATUS_PAGE_ID.get();
+    const statusPageId = await env.DEVHELM_STATUS_PAGE_SLUG.get();
     const res = await fetch(`${DEVHELM_API}/status-pages/${statusPageId}/incidents/${id}`, {
       method: "PATCH",
       headers: await devhelmHeaders(env),
