@@ -8,8 +8,8 @@
  * On trigger:
  *   - Creates a DevHelm internal incident (team dashboard)
  *   - ALSO posts to your public status page:
- *       incident / hotfix  → status page incident  (POST /status-pages/{slug}/incidents)
- *       maintenance        → status page maintenance window (POST /status-pages/{slug}/maintenance-windows)
+ *       incident / hotfix  → status page incident  (POST /status-pages/{id}/incidents)
+ *       maintenance        → maintenance window (POST /maintenance-windows)
  *   - Posts PR comment with both links
  *   - Syncs PR comments → internal incident timeline
  *   - Auto-resolves both internal incident + status page entry when PR closes/merges
@@ -183,30 +183,38 @@ async function handleIssueComment(payload, env) {
 // ─── DevHelm internal incident API ───────────────────────────────────────────
 
 async function devhelmCreateIncident(title, description, env) {
+  // POST /api/v1/incidents — Required: title, severity. No status field.
+  // Manual incidents immediately become CONFIRMED; severity drives alert routing.
   const res = await fetch(`${DEVHELM_API}/incidents`, {
     method: "POST",
     headers: await devhelmHeaders(env),
-    body: JSON.stringify({ title, description, status: "OPEN" }),
+    body: JSON.stringify({ title, severity: "DOWN", body: description }),
   });
   if (!res.ok) throw new Error(`Incident create ${res.status}: ${await res.text()}`);
   const json = await res.json();
-  return json.data ?? json;
+  // Response: { data: { incident, updates, statusPageIncidents, trigger } }
+  return json.data?.incident ?? json.data ?? json;
 }
 
 async function devhelmResolveIncident(incidentId, reason, env) {
-  const res = await fetch(`${DEVHELM_API}/incidents/${incidentId}`, {
-    method: "PATCH",
+  // POST /api/v1/incidents/{id}/resolve — body field is the resolution note.
+  // No status/resolvedAt/resolvedNote fields; endpoint handles the transition.
+  const res = await fetch(`${DEVHELM_API}/incidents/${incidentId}/resolve`, {
+    method: "POST",
     headers: await devhelmHeaders(env),
-    body: JSON.stringify({ status: "RESOLVED", resolvedAt: new Date().toISOString(), resolvedNote: reason }),
+    body: JSON.stringify({ body: reason }),
   });
   if (!res.ok) console.error(`Resolve incident ${res.status}: ${await res.text()}`);
 }
 
 async function devhelmAddTimelineUpdate(incidentId, message, env) {
+  // POST /api/v1/incidents/{id}/updates
+  // Required: notifySubscribers (boolean). Optional: body (string), newStatus.
+  // Field is "body" not "message".
   const res = await fetch(`${DEVHELM_API}/incidents/${incidentId}/updates`, {
     method: "POST",
     headers: await devhelmHeaders(env),
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ body: message, notifySubscribers: false }),
   });
   if (!res.ok) throw new Error(`Timeline ${res.status}: ${await res.text()}`);
 }
@@ -214,18 +222,22 @@ async function devhelmAddTimelineUpdate(incidentId, message, env) {
 // ─── DevHelm status page API ──────────────────────────────────────────────────
 
 async function devhelmCreateStatusPageIncident(title, description, triggerLabel, env) {
-  const slug   = await env.DEVHELM_STATUS_PAGE_SLUG.get();
-  const impact = triggerLabel === "hotfix" ? "major" : "minor";
+  // POST /api/v1/status-pages/{id}/incidents — {id} is the status page UUID, not slug.
+  // impact enum: NONE | MINOR | MAJOR | CRITICAL (uppercase)
+  // status enum: INVESTIGATING | IDENTIFIED | MONITORING | RESOLVED (uppercase)
+  // Required: title, impact, body.
+  const statusPageId = await env.DEVHELM_STATUS_PAGE_ID.get();
+  const impact = triggerLabel === "hotfix" ? "MAJOR" : "MINOR";
 
-  const res = await fetch(`${DEVHELM_API}/status-pages/${slug}/incidents`, {
+  const res = await fetch(`${DEVHELM_API}/status-pages/${statusPageId}/incidents`, {
     method: "POST",
     headers: await devhelmHeaders(env),
     body: JSON.stringify({
       title,
-      impact,        // "minor" | "major" | "critical"
+      impact,
       body: description,
-      status: "investigating",
-      // components: ["component-id-here"],  // optional — add your component IDs
+      status: "INVESTIGATING",
+      // affectedComponents: [{ componentId: "<uuid>", status: "PARTIAL_OUTAGE" }],
     }),
   });
   if (!res.ok) throw new Error(`Status page incident ${res.status}: ${await res.text()}`);
@@ -273,8 +285,7 @@ async function devhelmCreateMaintenanceWindow(title, description, pr, env) {
 }
 
 async function resolveStatusPageEntry(stored, reason, env) {
-  const slug = await env.DEVHELM_STATUS_PAGE_SLUG.get();
-  const id   = stored.statusPageEntryId;
+  const id = stored.statusPageEntryId;
   if (!id) return;
 
   if (stored.statusPageEntryType === "maintenance") {
@@ -287,10 +298,13 @@ async function resolveStatusPageEntry(stored, reason, env) {
     if (!res.ok) console.error(`Cancel maintenance window ${res.status}: ${await res.text()}`);
   } else {
     // Resolve the status page incident
-    const res = await fetch(`${DEVHELM_API}/status-pages/${slug}/incidents/${id}`, {
+    // PATCH /api/v1/status-pages/{id}/incidents/{incidentId}
+    // status enum is uppercase: RESOLVED. Endpoint uses page UUID not slug.
+    const statusPageId = await env.DEVHELM_STATUS_PAGE_ID.get();
+    const res = await fetch(`${DEVHELM_API}/status-pages/${statusPageId}/incidents/${id}`, {
       method: "PATCH",
       headers: await devhelmHeaders(env),
-      body: JSON.stringify({ status: "resolved", body: reason }),
+      body: JSON.stringify({ status: "RESOLVED", body: reason }),
     });
     if (!res.ok) console.error(`Resolve SP incident ${res.status}: ${await res.text()}`);
   }
@@ -333,11 +347,12 @@ async function buildStatusPageUrl(entry, isMaintenance, env) {
     return `https://app.devhelm.io/maintenance-windows/${entry.id}`;
   }
   // Status page incidents: use custom domain if set, else DevHelm-hosted URL.
+  // Slug is still used for the public-facing URL; ID is used for API calls.
   const [statusPageUrl, statusPageSlug] = await Promise.all([
     env.DEVHELM_STATUS_PAGE_URL.get(),
     env.DEVHELM_STATUS_PAGE_SLUG.get(),
   ]);
-  const base = (statusPageUrl || `https://app.devhelm.io/dashboard/status-pages/${statusPageSlug}`).replace(/\/$/, "");
+  const base = (statusPageUrl || `https://${statusPageSlug}.devhelm.io`).replace(/\/$/, "");
   return `${base}/incidents/${entry.id}`;
 }
 
