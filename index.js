@@ -346,13 +346,7 @@ async function buildStatusPageUrl(entry, isMaintenance, env) {
     // Maintenance windows are org-level, not on the status page.
     return `https://app.devhelm.io/maintenance-windows/${entry.id}`;
   }
-  // Status page incidents: use custom domain if set, else DevHelm-hosted URL.
-  // Slug is still used for the public-facing URL; ID is used for API calls.
-  const [statusPageUrl, statusPageSlug] = await Promise.all([
-    env.DEVHELM_STATUS_PAGE_URL.get(),
-    env.DEVHELM_STATUS_PAGE_SLUG.get(),
-  ]);
-  const base = (statusPageUrl || `https://${statusPageSlug}.devhelm.io`).replace(/\/$/, "");
+  const base = (await env.DEVHELM_STATUS_PAGE_URL.get()).replace(/\/$/, "");
   return `${base}/incidents/${entry.id}`;
 }
 
