@@ -105,7 +105,7 @@ async function handlePullRequest(payload, env) {
   const incidentType  = labelToType(triggerLabel);
 
   // ── Build shared content ──────────────────────────────────────────────────
-  const title       = `[${incidentType}] PR #${pr.number}: ${pr.title}`;
+  const title       = `[${incidentType}] ${pr.title}`;
   const description = buildDescription(pr, repository, triggerLabel);
 
   // ── Fire both DevHelm calls in parallel ──────────────────────────────────
@@ -174,8 +174,16 @@ async function handleIssueComment(payload, env) {
   if (!stored) return new Response("OK: not tracked", { status: 200 });
 
   const update = `**@${comment.user.login}** on [PR #${prNumber}](${issue.html_url}):\n\n${comment.body}`;
-  try { await devhelmAddTimelineUpdate(stored.incidentId, update, env); }
-  catch (err) { console.error("Timeline update failed:", err); }
+  try {
+    await Promise.all([
+      // Internal incident timeline
+      devhelmAddTimelineUpdate(stored.incidentId, update, env),
+      // Status page incident timeline (only for non-maintenance entries)
+      stored.statusPageEntryType !== "maintenance"
+        ? devhelmAddStatusPageIncidentUpdate(stored.statusPageEntryId, update, env)
+        : Promise.resolve(),
+    ]);
+  } catch (err) { console.error("Timeline update failed:", err); }
 
   return new Response("OK: timeline updated", { status: 200 });
 }
@@ -284,6 +292,25 @@ async function devhelmCreateMaintenanceWindow(title, description, pr, env) {
   return json.data ?? json;
 }
 
+async function devhelmAddStatusPageIncidentUpdate(statusPageIncidentId, message, env) {
+  // POST /api/v1/status-pages/{id}/incidents/{incidentId}/updates
+  // Required: status (enum), body (string). notifySubscribers defaults to true.
+  const statusPageId = await env.DEVHELM_STATUS_PAGE_SLUG.get();
+  const res = await fetch(
+    `${DEVHELM_API}/status-pages/${statusPageId}/incidents/${statusPageIncidentId}/updates`,
+    {
+      method: "POST",
+      headers: await devhelmHeaders(env),
+      body: JSON.stringify({
+        status: "INVESTIGATING",   // keep current status; update is informational
+        body: message,
+        notifySubscribers: false,  // PR comments are internal; don't email subscribers
+      }),
+    }
+  );
+  if (!res.ok) throw new Error(`SP timeline ${res.status}: ${await res.text()}`);
+}
+
 async function resolveStatusPageEntry(stored, reason, env) {
   const id = stored.statusPageEntryId;
   if (!id) return;
@@ -301,10 +328,12 @@ async function resolveStatusPageEntry(stored, reason, env) {
     // PATCH /api/v1/status-pages/{id}/incidents/{incidentId}
     // status enum is uppercase: RESOLVED. Endpoint uses page UUID not slug.
     const statusPageId = await env.DEVHELM_STATUS_PAGE_SLUG.get();
+    // PUT /api/v1/status-pages/{id}/incidents/{incidentId}
+    // null fields preserve current values; only pass what needs changing.
     const res = await fetch(`${DEVHELM_API}/status-pages/${statusPageId}/incidents/${id}`, {
-      method: "PATCH",
+      method: "PUT",
       headers: await devhelmHeaders(env),
-      body: JSON.stringify({ status: "RESOLVED", body: reason }),
+      body: JSON.stringify({ status: "RESOLVED" }),
     });
     if (!res.ok) console.error(`Resolve SP incident ${res.status}: ${await res.text()}`);
   }
